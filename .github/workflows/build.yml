@@ -1,0 +1,36 @@
+name: build quemao
+ 
+on:
+  push:
+  workflow_dispatch:
+ 
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Engine checks
+        run: |
+          g++ -std=c++17 -O2 -Isource tests/engine_tests.cpp -o engine_tests
+          ./engine_tests
+ 
+  build-mac:
+    needs: check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        run: brew install ninja
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+      - name: Build
+        run: cmake --build build --target quemao_VST3 --config Release
+      - name: Package
+        run: |
+          cd build/quemao_artefacts/Release/VST3
+          ls quemao.vst3/Contents/MacOS
+          ditto -c -k --keepParent quemao.vst3 "$GITHUB_WORKSPACE/quemao-vst3-mac.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quemao-vst3-mac
+          path: quemao-vst3-mac.zip
