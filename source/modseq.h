@@ -9,6 +9,8 @@
 #include <atomic>
 #include <string>
 #include <cstdio>
+#include <cstdlib>
+#include <cstdlib>
 
 namespace quemao {
 

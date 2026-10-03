@@ -9,6 +9,11 @@ QuemaoProcessor::QuemaoProcessor()
 {
     for (int i = 0; i < 4; ++i)
         lanes[i].setPattern (kLaneDefaults[i].pattern);
+
+    // safe defaults in case a host processes before calling prepareToPlay (some plugin scanners do)
+    for (auto& l : lanes) l.prepare (48000.0f);
+    mixer.prepare (48000.0f);
+    modSeq.prepare (48000.0f);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout QuemaoProcessor::createLayout()
@@ -188,6 +193,7 @@ void QuemaoProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 {
     juce::ScopedNoDenormals noDenormals;
     const int numSamples = buffer.getNumSamples();
+    if (buffer.getNumChannels() == 0) { midi.clear(); return; }
     buffer.clear();
 
     double bpm = 120.0, ppq0 = 0.0;
