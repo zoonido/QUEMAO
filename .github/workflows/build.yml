@@ -1,9 +1,9 @@
 name: build quemao
- 
+
 on:
   push:
   workflow_dispatch:
- 
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -13,7 +13,7 @@ jobs:
         run: |
           g++ -std=c++17 -O2 -Isource tests/engine_tests.cpp -o engine_tests
           ./engine_tests
- 
+
   build-mac:
     needs: check
     runs-on: macos-latest
@@ -30,7 +30,8 @@ jobs:
           cd build/quemao_artefacts/Release/VST3
           ls quemao.vst3/Contents/MacOS
           ditto -c -k --keepParent quemao.vst3 "$GITHUB_WORKSPACE/quemao-vst3-mac.zip"
-      - uses: actions/upload-artifact@v4
+      # archive: false uploads our zip as-is, so the download is ONE zip with quemao.vst3 inside
+      - uses: actions/upload-artifact@v7
         with:
-          name: quemao-vst3-mac
           path: quemao-vst3-mac.zip
+          archive: false
