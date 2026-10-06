@@ -3,7 +3,7 @@
 QUEMAO, a 4-lane percussion designer for Ableton (VST3, Mac): toms, congas, snares
 and hand drums for tribal/minimal techno, tribal/organic/progressive house, Cumbia and Bullerengue.
 
-**Current stage: 6 – the mod sequencer**
+**Complete: stage 7 – MIDI out, presets, hover help, final layout**
 
 - Four lanes, each with a 16-step pattern (click: hit → ghost → ratchet → off, right-click clears).
 - Six engines per lane, each giving the ARTIC knob its own job:
@@ -37,12 +37,16 @@ and hand drums for tribal/minimal techno, tribal/organic/progressive house, Cumb
   RATE 1/32 – 1/2, DEPTH, CLEAR, RANDOM. A dot marks knobs that are being modulated.
   Tune moves in whole semitones, so the toms can play melodies.
 - The window scales: drag its corner.
+- PRESETS: 9 factory kits (INIT, RITUAL 132, CUMBIA ROOTS, BULLERENGUE, MINIMAL RIM, ORGANIC HOUSE,
+  TRIBAL HOUSE, PROGRESSIVE DUB, FUEGO LENTO) plus your own: SAVE stores everything in
+  Music > ZOONIDO > QUEMAO Presets. Lane names are part of a preset; double-click a name to rename it.
+- MIDI OUT: every pattern hit leaves as a note (C1 D1 E1 F1, channel 1). Notes played in on
+  TRIGGER lanes are never echoed. In Ableton, set another MIDI track's MIDI From to QUEMAO's track.
+- HELP: hover any control and the bar at the bottom explains it.
 - MIDI per lane, notes C1, D1, E1, F1:
   - LAUNCH: note-on starts the pattern from step 1 instantly (or restarts it), note-off stops it.
     LATCH makes the lane follow Ableton's transport, locked to the grid.
   - TRIGGER: the note plays the drum directly with velocity (pad mode).
-
-Coming next: MIDI out, presets, hover help and the final interface.
 
 Every push builds the plugin for Mac automatically.
 Download it from the **Actions** tab → latest run → **Artifacts**.

@@ -123,6 +123,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout QuemaoProcessor::createLayou
         layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "modrate", 1 }, "Mod Rate", r, 1));
     }
     f01 ("moddepth", "Mod Depth", 0.6f);
+
+    // stage 7
+    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "midiout", 1 }, "MIDI Out", true));
     return layout;
 }
 
@@ -235,6 +238,9 @@ void QuemaoProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 
     auto it = midi.cbegin();
     const auto end = midi.cend();
+    juce::MidiBuffer midiOut;
+    const bool sendMidi = g ("midiout") > 0.5f;
+    const int noteLength = juce::jmax (1, (int) (sr * 60.0 / bpm / 8.0));   // a 1/32 note
 
     for (int n = 0; n < numSamples; ++n)
     {
@@ -263,6 +269,20 @@ void QuemaoProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 
         // choke groups: a hit on one lane cuts the other lanes in the same group
         // (a lane that struck on this same sample is left alone, so simultaneous hits both sound)
+        // MIDI out: every pattern hit as a note on the lane's own note (C1 D1 E1 F1), channel 1
+        for (int i = 0; i < 4; ++i)
+        {
+            if (noteOffIn[i] >= 0 && --noteOffIn[i] < 0)
+                midiOut.addEvent (juce::MidiMessage::noteOff (1, kLaneNotes[i]), n);
+            const float v = lanes[i].consumePatternHit();
+            if (v > 0.0f && sendMidi)
+            {
+                if (noteOffIn[i] >= 0) midiOut.addEvent (juce::MidiMessage::noteOff (1, kLaneNotes[i]), n);
+                midiOut.addEvent (juce::MidiMessage::noteOn (1, kLaneNotes[i], juce::jlimit (0.05f, 1.0f, v)), n);
+                noteOffIn[i] = noteLength;
+            }
+        }
+
         bool fired[4];
         for (int i = 0; i < 4; ++i) fired[i] = lanes[i].consumeFired();
         for (int i = 0; i < 4; ++i)
@@ -278,6 +298,7 @@ void QuemaoProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         if (right != nullptr) { left[n] = outL; right[n] = outR; }
         else                  left[n] = 0.5f * (outL + outR);
     }
+    midi.swapWith (midiOut);
 }
 
 void QuemaoProcessor::getStateInformation (juce::MemoryBlock& destData)
@@ -300,6 +321,11 @@ void QuemaoProcessor::getStateInformation (juce::MemoryBlock& destData)
         else state.setProperty (key, juce::String (txt), nullptr);
     }
     state.setProperty ("modTarget", modTarget.load(), nullptr);
+    {
+        const juce::ScopedLock sl (nameLock);
+        state.setProperty ("presetName", presetName, nullptr);
+        for (int i = 0; i < 4; ++i) state.setProperty (juce::Identifier ("name" + juce::String (i + 1)), laneNames[i], nullptr);
+    }
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -329,8 +355,103 @@ void QuemaoProcessor::setStateInformation (const void* data, int sizeInBytes)
         }
         if (state.hasProperty ("modTarget"))
             modTarget.store (juce::jlimit (0, kNumModTargets - 1, (int) state.getProperty ("modTarget")));
+        {
+            const juce::ScopedLock sl (nameLock);
+            if (state.hasProperty ("presetName")) presetName = state.getProperty ("presetName").toString();
+            for (int i = 0; i < 4; ++i)
+            {
+                const auto key = juce::Identifier ("name" + juce::String (i + 1));
+                if (state.hasProperty (key)) laneNames[i] = state.getProperty (key).toString();
+            }
+        }
+        presetVersion.fetch_add (1);
         apvts.replaceState (state);
     }
+}
+
+// ---------------------------------------------------------------- presets
+
+void QuemaoProcessor::applyFactoryPreset (int index)
+{
+    const auto& fp = factoryPreset (index);
+
+    // everything back to its default, then the preset's own values
+    for (auto* param : getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (param))
+            rp->setValueNotifyingHost (rp->getDefaultValue());
+
+    for (auto token : juce::StringArray::fromTokens (fp.params, " ", ""))
+    {
+        const auto id = token.upToFirstOccurrenceOf ("=", false, false);
+        const auto value = token.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+        if (auto* rp = apvts.getParameter (id))
+            rp->setValueNotifyingHost (rp->convertTo0to1 (value));
+    }
+
+    for (int i = 0; i < 4; ++i)
+    {
+        lanes[i].setPattern (fp.patterns[i]);
+        lanes[i].setLocks ("");
+    }
+
+    modSeq.clearAll();
+    for (auto lane : juce::StringArray::fromTokens (fp.mods, ";", ""))
+    {
+        if (! lane.containsChar (':')) continue;
+        const int t = lane.upToFirstOccurrenceOf (":", false, false).getIntValue();
+        if (t >= 0 && t < kNumModTargets)
+            modSeq.deserialise (t, lane.fromFirstOccurrenceOf (":", false, false).toStdString());
+    }
+
+    {
+        const juce::ScopedLock sl (nameLock);
+        presetName = fp.name;
+        for (int i = 0; i < 4; ++i) laneNames[i] = fp.laneNames[i];
+    }
+    presetVersion.fetch_add (1);
+}
+
+juce::File QuemaoProcessor::userPresetFolder()
+{
+    return juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("ZOONIDO").getChildFile ("QUEMAO Presets");
+}
+
+juce::Array<juce::File> QuemaoProcessor::userPresets() const
+{
+    auto files = userPresetFolder().findChildFiles (juce::File::findFiles, false, "*.quemao");
+    files.sort();
+    return files;
+}
+
+bool QuemaoProcessor::saveUserPreset (const juce::String& rawName)
+{
+    const auto name = rawName.trim().toUpperCase();
+    if (name.isEmpty()) return false;
+    {
+        const juce::ScopedLock sl (nameLock);
+        presetName = name;
+    }
+    juce::MemoryBlock data;
+    getStateInformation (data);
+    auto folder = userPresetFolder();
+    if (! folder.createDirectory()) return false;
+    const auto file = folder.getChildFile (juce::File::createLegalFileName (name) + ".quemao");
+    const bool ok = file.replaceWithData (data.getData(), data.getSize());
+    presetVersion.fetch_add (1);
+    return ok;
+}
+
+bool QuemaoProcessor::loadUserPreset (const juce::File& file)
+{
+    juce::MemoryBlock data;
+    if (! file.loadFileAsData (data) || data.getSize() == 0) return false;
+    setStateInformation (data.getData(), (int) data.getSize());
+    {
+        const juce::ScopedLock sl (nameLock);
+        presetName = file.getFileNameWithoutExtension().toUpperCase();
+    }
+    presetVersion.fetch_add (1);
+    return true;
 }
 
 juce::AudioProcessorEditor* QuemaoProcessor::createEditor() { return new QuemaoEditor (*this); }

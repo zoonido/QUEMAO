@@ -3,6 +3,9 @@
 #include "generator.h"
 #include "fx.h"
 #include "modseq.h"
+#include "presets.h"
+#include <set>
+#include <sstream>
 #include <cstdio>
 #include <vector>
 #include <cmath>
@@ -394,6 +397,54 @@ int main() {
         LaneSettings s6[4]; LaneSends d6[4];
         for (int i = 0; i < 6100; ++i) { for (auto& x : s6) x = LaneSettings(); m3.apply (0.0, false, 120.0 / 60.0 / sr, 1, 1.0f, s6, d6); }
         check (m3.uiStep.load() == 1, "MOD: keeps stepping at host tempo while Ableton is stopped");
+    }
+
+    // ---- stage 7: presets and MIDI out ----
+    {
+        const std::set<std::string> laneIds = { "eng","mode","latch","tune","fine","decay","artic","level","penv","pdec","attack","tone","drive",
+                                                "cutoff","res","pan","fmode","choke","genre","dens","ghost","var","prob","human","swing",
+                                                "sendd","sendv","sendc","dtime" };
+        const std::set<std::string> globalIds = { "master","chtone","chrate","chmix","gdtime","dfdbk","dtone","dmix","vtype","vsize","vdamp",
+                                                  "vmix","comp","crush","modrate","moddepth","midiout" };
+        bool idsOk = true, patternsOk = true, modsOk = true, namesOk = true;
+        std::string bad;
+        for (int i = 0; i < kNumFactoryPresets; ++i) {
+            const auto& fp = factoryPreset (i);
+            std::istringstream ss (fp.params); std::string tok;
+            while (ss >> tok) {
+                const auto eq = tok.find ('=');
+                std::string id = tok.substr (0, eq);
+                const bool lane = ! id.empty() && id.back() >= '1' && id.back() <= '4' && laneIds.count (id.substr (0, id.size() - 1));
+                if (eq == std::string::npos || ! (lane || globalIds.count (id))) { idsOk = false; bad = tok; }
+            }
+            for (auto* pat : fp.patterns) {
+                if (std::strlen (pat) != 16) patternsOk = false;
+                for (const char* c = pat; *c; ++c) if (std::strchr (".xgr", *c) == nullptr) patternsOk = false;
+            }
+            for (auto* n : fp.laneNames) if (n == nullptr || std::strlen (n) == 0 || std::strlen (n) > 14) namesOk = false;
+            std::string mods (fp.mods); size_t start = 0;
+            while (start < mods.size()) {
+                size_t end = mods.find (';', start); if (end == std::string::npos) end = mods.size();
+                const std::string lane = mods.substr (start, end - start);
+                const int t = std::atoi (lane.c_str());
+                int commas = 0; for (char c : lane) commas += c == ',';
+                if (t < 0 || t >= kNumModTargets || commas != 15 || lane.find (':') == std::string::npos) modsOk = false;
+                start = end + 1;
+            }
+        }
+        char msg[160]; std::snprintf (msg, sizeof msg, "PRESETS: every parameter id is real %s", bad.c_str());
+        check (idsOk, msg);
+        check (patternsOk, "PRESETS: every pattern is 16 valid steps");
+        check (modsOk, "PRESETS: every mod lane has a valid target and 16 values");
+        check (namesOk, "PRESETS: every lane has a name that fits");
+    }
+    {   // MIDI out reports pattern hits only, never notes played in by TRIGGER
+        Lane pat; pat.prepare (sr); pat.setPattern ("x...............");
+        LaneSettings s; pat.noteOn (1.0f, s); pat.process (s, 120.0, false, 0.0);
+        const float v = pat.consumePatternHit();
+        Lane trg; trg.prepare (sr); LaneSettings t; t.trigger = true;
+        trg.noteOn (0.9f, t); trg.process (t, 120.0, false, 0.0);
+        check (v > 0.9f && trg.consumePatternHit() == 0.0f, "MIDI OUT: pattern hits go out, TRIGGER notes never echo back");
     }
 
     // ---- clock ----

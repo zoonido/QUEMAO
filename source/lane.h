@@ -139,6 +139,9 @@ public:
 
     // true once after this lane struck a hit (used for choke groups)
     bool consumeFired() { const bool f = fired; fired = false; return f; }
+    // stage 7: velocity of a pattern hit struck this sample (for MIDI out), 0 if none.
+    // Hits played from incoming TRIGGER notes are not echoed, so MIDI never loops back.
+    float consumePatternHit() { const float v = patternHit; patternHit = 0.0f; return v; }
     void chokeAll() { for (auto& v : voices) v.choke(); }
 
     void setPattern (const char* p) {
@@ -193,7 +196,7 @@ public:
 
         // hits delayed by swing / humanize
         for (int i = 0; i < numPending; ) {
-            if (--pending[i].delay <= 0) { fire (s.voice, pending[i].vel); pending[i] = pending[--numPending]; }
+            if (--pending[i].delay <= 0) { fire (s.voice, pending[i].vel); patternHit = pending[i].vel; pending[i] = pending[--numPending]; }
             else ++i;
         }
 
@@ -232,7 +235,7 @@ private:
             vel = std::clamp (vel * (1.0f + (rand01() - 0.5f) * 0.4f * s.human), 0.05f, 1.0f);
         }
         const int d = (int) std::lround (delay);
-        if (d < 1 || numPending >= kMaxPending) fire (s.voice, vel);
+        if (d < 1 || numPending >= kMaxPending) { fire (s.voice, vel); patternHit = vel; }
         else pending[numPending++] = { d, vel };
     }
 
@@ -248,6 +251,7 @@ private:
     DrumVoice voices[kVoices];
     LaneFx fx;
     bool fired = false;
+    float patternHit = 0.0f;
     float sr = 48000.0f;
     bool held = false, wasPlaying = false;
     double counter = 0.0;

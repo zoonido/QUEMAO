@@ -23,6 +23,50 @@ namespace
                                     "CUTOFF", "RES", "PAN" };
     constexpr int kArticKnob = 6;
     juce::String percent (double v) { return juce::String ((int) std::round (v * 100.0)) + "%"; }
+
+    // stage 7: hover help. Each control carries its sentence; the bar at the bottom shows it.
+    void help (juce::Component& c, const char* text) { c.getProperties().set ("help", juce::String::fromUTF8 (text)); }
+
+    const char* engineHelp (int e)
+    {
+        static const char* t[6] = {
+            "MEMBRANA: drumhead model for toms, floor toms and frame drums. EDGE moves the strike from centre to rim.",
+            "MANO: hand drum for conga, bongo, tambor alegre and llamador. ARTIC goes muted > open > slap.",
+            "CAJA: snare, body + wires. STROKE goes cross-stick > hit > rimshot; DECAY sets the wires.",
+            "ANÁLOGO: drum-machine circuits. TYPE picks TOM, SNARE, RIM or CLAP.",
+            "MADERA: wood shell + plucked knock for cajón, tambora shell and wood block. RIM moves shell > rim.",
+            "FM: two-operator FM toms. METAL goes from round to metallic." };
+        return t[juce::jlimit (0, 5, e)];
+    }
+    const char* knobHelp (int k)
+    {
+        static const char* t[13] = {
+            "TUNE: pitch in semitones (±24). The mod sequencer can walk it as a melody.",
+            "FINE: fine pitch in cents (±50).",
+            "P.ENV: depth of the pitch drop at the strike. Centre = the engine's own, left = none, right = deep laser-tom sweep.",
+            "P.DEC: speed of the pitch drop. Left = 4x faster, right = 4x slower.",
+            "ATTACK: fades in the strike (0-30 ms) to take the click off.",
+            "DECAY: how long the drum rings. On CAJA it also sets the wires.",
+            "",
+            "TONE: tilts the lane dark <> bright. Centre is flat.",
+            "DRIVE: saturates the lane for grit and weight.",
+            "LEVEL: the lane's volume. Velocity and ghost notes scale from here.",
+            "CUTOFF: filter cutoff. Fully right is open in both LP and HP.",
+            "RES: filter resonance, a whistle at the cutoff.",
+            "PAN: places the lane left <> right; its echoes follow." };
+        return t[juce::jlimit (0, 12, k)];
+    }
+    const char* articHelp (int e)
+    {
+        static const char* t[6] = {
+            "EDGE: where the stick hits the head. Left = centre (deep, round), right = rim (bright, ringing).",
+            "ARTIC: the hand stroke. Left = muted (palm), centre = open tone, right = slap.",
+            "STROKE: left = cross-stick, centre = normal hit, right = rimshot.",
+            "TYPE: four circuits across the knob: TOM, SNARE, RIM, CLAP. Within each zone it tweaks the circuit.",
+            "RIM: left = low shell knock, right = bright wood-block rim.",
+            "METAL: the FM ratio and brightness. Left = round tom, right = metallic, bell-like." };
+        return t[juce::jlimit (0, 5, e)];
+    }
     const char* kNoteNames[4]  = { "C1", "D1", "E1", "F1" };
 }
 
@@ -347,6 +391,40 @@ LaneStrip::LaneStrip (QuemaoProcessor& p, int i)
     delayTimeAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, QuemaoProcessor::pid ("dtime", index), delayTimeBox);
 
     addAndMakeVisible (grid);
+
+    // stage 7: editable lane name (double-click)
+    nameLabel.setFont (displayFont (18.0f));
+    nameLabel.setColour (juce::Label::textColourId, ui::text);
+    nameLabel.setColour (juce::Label::textWhenEditingColourId, ui::text);
+    nameLabel.setColour (juce::Label::backgroundWhenEditingColourId, ui::well);
+    nameLabel.setColour (juce::Label::outlineWhenEditingColourId, colour);
+    nameLabel.setEditable (false, true, false);
+    nameLabel.onTextChange = [this] { proc.setLaneName (index, nameLabel.getText()); nameLabel.setText (proc.getLaneName (index), juce::dontSendNotification); };
+    addAndMakeVisible (nameLabel);
+    help (nameLabel, "Lane name: double-click to rename. Presets set it too.");
+
+    for (int e = 0; e < kNumEngines; ++e) help (engines[e], engineHelp (e));
+    help (launch, "LAUNCH: hold the lane's note to play its pattern from step 1; play it again to restart, let go to stop.");
+    help (trigger, "TRIGGER: the lane's note plays the drum directly with velocity, like a pad. The pattern rests.");
+    help (latch, "LATCH: the lane follows Ableton's transport, locked to the grid. No notes needed.");
+    for (int k = 0; k < 13; ++k) if (k != kArticKnob) help (knobs[k], knobHelp (k));
+    help (lp, "LP: low-pass filter. Lower the cutoff to darken the lane.");
+    help (hp, "HP: high-pass filter. Lower the cutoff to thin the body out.");
+    for (auto& c : chokeButtons) help (c, "CHOKE: lanes in the same group (A or B) cut each other off, like an open and a muted conga.");
+    help (genreBox, "GENRE: picking one writes a pattern for this drum's role (toms, hand drums or back-beat). MANUAL clears the row.");
+    help (generateButton, "GENERATE: rolls a new pattern from the genre. Locked steps are never touched.");
+    help (genKnobs[0], "DENS: how many hits. Reshapes the same pattern live as you turn it.");
+    help (genKnobs[1], "GHOST: how many soft ghost notes fill the gaps.");
+    help (genKnobs[2], "VAR: how far the pattern strays from the genre's template (Euclidean: rotation).");
+    help (genKnobs[3], "PROB: the chance that each hit plays. Lower it for a pattern that breathes.");
+    help (genKnobs[4], "HUMAN: up to 12 ms of laid-back timing drift plus velocity variation.");
+    help (genKnobs[5], "SWING: pushes the off 16ths late, 50% to 75%.");
+    help (sendKnobs[0], "DLY: send to the ping-pong delay. The echo is added on top of the dry hit.");
+    help (sendKnobs[1], "VERB: send to the reverb, added on top of the dry hit.");
+    help (sendKnobs[2], "CHOR: send to the chorus, added on top of the dry hit.");
+    help (delayTimeBox, "D.TIME: this lane's echo spacing. GLOBAL follows the DELAY block's TIME.");
+    help (grid, "STEPS: click cycles hit > ghost > ratchet > off. Right-click for the step menu, option-click to lock a step.");
+
     refresh();
 }
 
@@ -380,6 +458,12 @@ void LaneStrip::refresh()
     trigger.setToggleState (mode == 1, juce::dontSendNotification);
     latch.setEnabled (mode == 0);
     grid.setAlpha (mode == 0 ? 1.0f : 0.35f);
+    help (knobs[kArticKnob], articHelp (eng));
+    if (proc.presetVersion.load() != lastPresetVersion)
+    {
+        lastPresetVersion = proc.presetVersion.load();
+        nameLabel.setText (proc.getLaneName (index), juce::dontSendNotification);
+    }
     juce::String artic (articLabel ((Engine) eng));
     if ((Engine) eng == Engine::analogo)
         artic = analogTypeName (analogType (proc.apvts.getRawParameterValue (QuemaoProcessor::pid ("artic", index))->load()));
@@ -419,13 +503,7 @@ void LaneStrip::paint (juce::Graphics& g)
 
     g.setColour (colour);
     g.fillEllipse (14.0f, 19.0f, 10.0f, 10.0f);
-    g.setColour (ui::text);
-    g.setFont (displayFont (18.0f));
-    {
-        const auto eng = (Engine) choice ("eng");
-        g.drawText (eng == Engine::analogo ? juce::String::fromUTF8 ("ANÁLOGO") : juce::String (engineName (eng)),
-                    32, 12, 160, 24, juce::Justification::centredLeft);
-    }
+
     g.setColour (ui::muted);
     g.setFont (monoFont (10.0f));
     g.drawText ("LANE " + juce::String (index + 1) + juce::String::fromUTF8 (" · ") + kNoteNames[index], getWidth() - 112, 12, 100, 24, juce::Justification::centredRight);
@@ -469,6 +547,7 @@ void LaneStrip::paint (juce::Graphics& g)
 
 void LaneStrip::resized()
 {
+    nameLabel.setBounds (26, 10, getWidth() - 130, 28);
     const int pad = 14, w = getWidth() - pad * 2;
     const int tw = (w - 8) / 3;
     for (int e = 0; e < kNumEngines; ++e)
@@ -528,6 +607,20 @@ FxPanel::FxPanel (QuemaoProcessor& p) : proc (p)
     for (int d = 0; d < kNumDivisions; ++d) dTime.addItem (juce::String ("TIME ") + divisionName (d), d + 1);
     addAndMakeVisible (dTime);
     dTimeA = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "gdtime", dTime);
+    help (chTone.s, "CHORUS TONE: brightness of the chorus return.");
+    help (chRate.s, "CHORUS RATE: speed of the chorus wobble, 0.1-5 Hz.");
+    help (chMix.s, "CHORUS MIX: level of the chorus return, added on top.");
+    help (dFdbk.s, "DELAY FDBK: how many repeats.");
+    help (dTone.s, "DELAY TONE: darker or brighter repeats.");
+    help (dMix.s, "DELAY MIX: level of the echoes, added on top.");
+    help (dTime, "DELAY TIME: the global echo spacing. Lanes set to GLOBAL follow it.");
+    help (vSize.s, "REVERB SIZE: length of the tail.");
+    help (vDamp.s, "REVERB DAMP: softens the tail's highs.");
+    help (vMix.s, "REVERB MIX: level of the reverb, added on top.");
+    help (vType, "REVERB TYPE: ROOM (tight), PLATE (dense, bright) or HALL (big, with pre-delay).");
+    help (comp.s, "COMP: punchy bus compressor. The attack gets through, the body gets squeezed and lifted.");
+    help (crush.s, "CRUSH: bit and sample-rate reduction, 16 down to 4 bits.");
+    help (gain.s, "GAIN: QUEMAO's output level.");
     for (int t = 0; t < 3; ++t) vType.addItem (reverbTypeName (t), t + 1);
     addAndMakeVisible (vType);
     vTypeA = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "vtype", vType);
@@ -678,6 +771,12 @@ ModPanel::ModPanel (QuemaoProcessor& p) : proc (p), bars (p)
     for (auto* b : { &clear, &dice }) addAndMakeVisible (b);
 
     bars.onEdit = [this] { repaint (0, getHeight() - 26, getWidth(), 26); updateTargetNames(); };
+    help (target, "TARGET: the knob this lane of the mod sequencer moves. Every knob keeps its own lane; a dot marks the ones in use.");
+    help (rate, "RATE: how long each of the 16 steps lasts, synced to Ableton.");
+    help (depth, "DEPTH: how far the drawn steps push their knobs. 0 switches the movement off.");
+    help (clear, "CLEAR: flattens the selected target's lane.");
+    help (dice, "RANDOM: draws a random lane for the selected target.");
+    help (bars, "MOD STEPS: drag to draw, double-click a bar to reset. The centre line is the knob's own value.");
     addAndMakeVisible (bars);
     updateTargetNames();
 }
@@ -766,14 +865,98 @@ MainView::MainView (QuemaoProcessor& p) : proc (p), modPanel (p), fxPanel (p)
     }
     addAndMakeVisible (modPanel);
     addAndMakeVisible (fxPanel);
+
+    // presets
+    presetBox.setTextWhenNothingSelected ("PRESET");
+    presetBox.onChange = [this] { if (presetBox.getSelectedId() > 0) loadPresetById (presetBox.getSelectedId()); };
+    prevPreset.onClick = [this] { stepPreset (-1); };
+    nextPreset.onClick = [this] { stepPreset (1); };
+    savePreset.onClick = [this] { askToSave(); };
+    midiOut.setClickingTogglesState (true);
+    midiOutA = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "midiout", midiOut);
+    for (auto* c : std::initializer_list<juce::Component*> { &presetBox, &prevPreset, &nextPreset, &savePreset, &midiOut })
+        addAndMakeVisible (c);
+    help (presetBox, "PRESET: factory kits and your own saved kits (Music > ZOONIDO > QUEMAO Presets).");
+    help (prevPreset, "Previous preset.");
+    help (nextPreset, "Next preset.");
+    help (savePreset, "SAVE: stores everything (sounds, patterns, locks, mod lanes, lane names) as your own preset.");
+    help (midiOut, "MIDI OUT: sends every pattern hit as a note (C1 D1 E1 F1). In another MIDI track set MIDI From to this track.");
+    rebuildPresetList();
+
     setSize (kWidth, kHeight);
+}
+
+void MainView::rebuildPresetList()
+{
+    presetBox.clear (juce::dontSendNotification);
+    presetBox.addSectionHeading ("FACTORY");
+    for (int i = 0; i < kNumFactoryPresets; ++i) presetBox.addItem (factoryPreset (i).name, i + 1);
+    userFiles = proc.userPresets();
+    if (! userFiles.isEmpty())
+    {
+        presetBox.addSectionHeading ("YOURS");
+        for (int i = 0; i < userFiles.size(); ++i)
+            presetBox.addItem (userFiles[i].getFileNameWithoutExtension().toUpperCase(), 101 + i);
+    }
+    presetBox.setText (proc.getPresetName(), juce::dontSendNotification);
+}
+
+void MainView::loadPresetById (int id)
+{
+    if (id >= 1 && id <= kNumFactoryPresets) proc.applyFactoryPreset (id - 1);
+    else if (id >= 101 && id - 101 < userFiles.size()) proc.loadUserPreset (userFiles[id - 101]);
+    presetBox.setText (proc.getPresetName(), juce::dontSendNotification);
+}
+
+void MainView::stepPreset (int delta)
+{
+    juce::Array<int> ids;
+    for (int i = 0; i < kNumFactoryPresets; ++i) ids.add (i + 1);
+    for (int i = 0; i < userFiles.size(); ++i) ids.add (101 + i);
+    int current = -1;
+    for (int i = 0; i < ids.size(); ++i)
+        if (presetBox.getItemText (presetBox.indexOfItemId (ids[i])) == proc.getPresetName()) current = i;
+    const int next = current < 0 ? 0 : (current + delta + ids.size()) % ids.size();
+    loadPresetById (ids[next]);
+}
+
+void MainView::askToSave()
+{
+    auto* w = new juce::AlertWindow ("SAVE PRESET", "Name your kit:", juce::MessageBoxIconType::NoIcon, this);
+    w->addTextEditor ("name", proc.getPresetName());
+    w->addButton ("SAVE", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    w->addButton ("CANCEL", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    juce::Component::SafePointer<MainView> safe (this);
+    w->enterModalState (true, juce::ModalCallbackFunction::create ([safe, w] (int result)
+    {
+        if (safe == nullptr || result != 1) return;
+        const auto name = w->getTextEditorContents ("name");
+        if (safe->proc.saveUserPreset (name)) safe->rebuildPresetList();
+    }), true);
 }
 
 void MainView::refresh()
 {
     for (auto& s : strips) s->refresh();
     modPanel.refresh();
-    repaint (getWidth() - 370, 14, 200, 40);
+    repaint (getWidth() - 210, 14, 120, 40);
+
+    if (proc.presetVersion.load() != lastPresetVersion)
+    {
+        lastPresetVersion = proc.presetVersion.load();
+        presetBox.setText (proc.getPresetName(), juce::dontSendNotification);
+    }
+
+    // hover help: the sentence of whatever control is under the mouse
+    juce::String text;
+    auto* c = juce::Desktop::getInstance().getMainMouseSource().getComponentUnderMouse();
+    while (c != nullptr && c != this)
+    {
+        if (c->getProperties().contains ("help")) { text = c->getProperties()["help"].toString(); break; }
+        c = c->getParentComponent();
+    }
+    if (c != this && c == nullptr) text = {};
+    if (text != helpText) { helpText = text; repaint (0, getHeight() - 36, getWidth(), 36); }
 }
 
 void MainView::paint (juce::Graphics& g)
@@ -786,10 +969,10 @@ void MainView::paint (juce::Graphics& g)
 
     g.setColour (ui::muted);
     g.setFont (monoFont (11.0f));
-    g.drawText (juce::String::fromUTF8 ("PERCUSSION DESIGNER  ·  STAGE 6: MOD SEQUENCER"), 200, 24, 520, 22, juce::Justification::centredLeft);
+    g.drawText ("PERCUSSION DESIGNER", 196, 24, 180, 22, juce::Justification::centredLeft);
 
-    const juce::String bpm = juce::String::fromUTF8 ("HOST · ") + juce::String (proc.uiBpm.load(), 1) + " BPM";
-    auto box = juce::Rectangle<float> ((float) getWidth() - 360.0f, 18.0f, 150.0f, 30.0f);
+    const juce::String bpm = juce::String (proc.uiBpm.load(), 1) + " BPM";
+    auto box = juce::Rectangle<float> ((float) getWidth() - 205.0f, 18.0f, 104.0f, 30.0f);
     g.setColour (ui::wellEdge);
     g.drawRoundedRectangle (box, 4.0f, 1.0f);
     g.setColour (ui::muted);
@@ -800,10 +983,20 @@ void MainView::paint (juce::Graphics& g)
     g.setColour (ui::edge);
     g.drawHorizontalLine (64, 20.0f, (float) getWidth() - 20.0f);
 
-    g.setColour (ui::muted);
+    // help bar
+    auto bar = juce::Rectangle<float> (20.0f, (float) getHeight() - 34.0f, (float) getWidth() - 40.0f, 26.0f);
+    g.setColour (ui::panel);
+    g.fillRoundedRectangle (bar, 5.0f);
+    g.setColour (ui::edge);
+    g.drawRoundedRectangle (bar.reduced (0.5f), 5.0f, 1.0f);
+    g.setFont (monoFont (10.5f, true));
+    g.setColour (ui::ember);
+    g.drawText ("?", bar.withWidth (26.0f), juce::Justification::centred);
     g.setFont (monoFont (10.5f));
-    g.drawText (juce::String::fromUTF8 ("LAUNCH: hold the lane's note to play its pattern, play it again to restart  ·  LATCH: follow Ableton's transport  ·  TRIGGER: the note plays the drum with velocity"),
-                20, getHeight() - 30, getWidth() - 40, 18, juce::Justification::centredLeft);
+    g.setColour (helpText.isEmpty() ? ui::muted : ui::text);
+    g.drawText (helpText.isEmpty() ? juce::String::fromUTF8 ("Hover any control for help  ·  lane notes C1 D1 E1 F1  ·  LAUNCH holds, TRIGGER plays, LATCH follows the transport")
+                                   : helpText,
+                bar.withTrimmedLeft (28.0f).withTrimmedRight (8.0f), juce::Justification::centredLeft, true);
 }
 
 void MainView::resized()
@@ -812,14 +1005,19 @@ void MainView::resized()
     const int w = (getWidth() - 40 - gap * 3) / 4;
     for (int i = 0; i < 4; ++i)
         strips[i]->setBounds (20 + i * (w + gap), top, w, h);
-    const int y = top + h + gap, bh = 210;
+    const int y = top + h + gap, bh = 206;
+    prevPreset.setBounds (400, 20, 26, 26);
+    presetBox.setBounds (430, 20, 220, 26);
+    nextPreset.setBounds (654, 20, 26, 26);
+    savePreset.setBounds (688, 20, 64, 26);
+    midiOut.setBounds (getWidth() - 320, 20, 100, 26);
     modPanel.setBounds (20, y, 2 * w + gap, bh);
     fxPanel.setBounds (20 + 2 * (w + gap), y, 2 * w + gap, bh);
 }
 
 // ---------------------------------------------------------------- editor
 
-QuemaoEditor::QuemaoEditor (QuemaoProcessor& p) : AudioProcessorEditor (&p), proc (p), view (p)
+QuemaoEditor::QuemaoEditor (QuemaoProcessor& p) : AudioProcessorEditor (&p), view (p)
 {
     setLookAndFeel (&look);
     addAndMakeVisible (view);

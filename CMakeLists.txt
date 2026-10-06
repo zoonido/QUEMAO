@@ -23,7 +23,7 @@ juce_add_plugin(quemao
     PRODUCT_NAME "quemao"
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
-    NEEDS_MIDI_OUTPUT FALSE
+    NEEDS_MIDI_OUTPUT TRUE
     IS_MIDI_EFFECT FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE
@@ -56,4 +56,13 @@ if(DEFINED JUCE_LOCAL_PATH)
     target_include_directories(quemao_snapshot PRIVATE source)
     target_compile_definitions(quemao_snapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JucePlugin_Name="quemao")
     target_link_libraries(quemao_snapshot PRIVATE juce::juce_audio_utils)
+endif()
+
+# Local-only offline renderer (never built on GitHub)
+if(DEFINED JUCE_LOCAL_PATH)
+    juce_add_console_app(quemao_render PRODUCT_NAME "quemao_render")
+    target_sources(quemao_render PRIVATE tools/render.cpp source/plugin_processor.cpp source/plugin_editor.cpp)
+    target_include_directories(quemao_render PRIVATE source)
+    target_compile_definitions(quemao_render PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JucePlugin_Name="quemao")
+    target_link_libraries(quemao_render PRIVATE juce::juce_audio_utils)
 endif()

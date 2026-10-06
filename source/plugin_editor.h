@@ -82,6 +82,10 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sendAttach[3];
     juce::ComboBox delayTimeBox;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> delayTimeAttach;
+
+    // stage 7: editable lane name
+    juce::Label nameLabel;
+    int lastPresetVersion = -1;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> latchAttach;
     StepGrid grid;
 
@@ -154,10 +158,23 @@ public:
     void refresh();
     static constexpr int kWidth = 1200, kHeight = 982;
 private:
+    void rebuildPresetList();
+    void loadPresetById (int id);
+    void stepPreset (int delta);
+    void askToSave();
+
     QuemaoProcessor& proc;
     std::unique_ptr<LaneStrip> strips[4];
     ModPanel modPanel;
     FxPanel fxPanel;
+
+    // stage 7: presets, MIDI out, hover help
+    juce::ComboBox presetBox;
+    juce::TextButton prevPreset { "<" }, nextPreset { ">" }, savePreset { "SAVE" }, midiOut { "MIDI OUT" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> midiOutA;
+    juce::Array<juce::File> userFiles;
+    juce::String helpText;
+    int lastPresetVersion = -1;
 };
 
 class QuemaoEditor : public juce::AudioProcessorEditor, private juce::Timer
@@ -172,7 +189,6 @@ public:
 private:
     void timerCallback() override;
 
-    QuemaoProcessor& proc;
     QuemaoLook look;
     MainView view;
 
