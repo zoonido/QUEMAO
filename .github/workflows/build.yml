@@ -23,15 +23,25 @@ jobs:
         run: brew install ninja
       - name: Configure
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
-      - name: Build
-        run: cmake --build build --target quemao_VST3 --config Release
+      - name: Build (Audio Unit + VST3)
+        run: cmake --build build --target quemao_AU quemao_VST3 --config Release
+      - name: Sign and check
+        run: |
+          cd build/quemao_artefacts/Release
+          codesign --force --deep --sign - AU/quemao.component
+          codesign --force --deep --sign - VST3/quemao.vst3
+          lipo -archs AU/quemao.component/Contents/MacOS/quemao
+          lipo -archs VST3/quemao.vst3/Contents/MacOS/quemao
       - name: Package
         run: |
-          cd build/quemao_artefacts/Release/VST3
-          ls quemao.vst3/Contents/MacOS
-          ditto -c -k --keepParent quemao.vst3 "$GITHUB_WORKSPACE/quemao-vst3-mac.zip"
-      # archive: false uploads our zip as-is, so the download is ONE zip with quemao.vst3 inside
+          mkdir -p package
+          cp -R build/quemao_artefacts/Release/AU/quemao.component package/
+          cp -R build/quemao_artefacts/Release/VST3/quemao.vst3 package/
+          cd package
+          ditto -c -k --sequesterRsrc . "$GITHUB_WORKSPACE/quemao-mac.zip"
+      # archive: false uploads our zip as-is, so the download is ONE zip with both plugins inside
       - uses: actions/upload-artifact@v7
         with:
-          path: quemao-vst3-mac.zip
+          path: quemao-mac.zip
           archive: false
+ 
