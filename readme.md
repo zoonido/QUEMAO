@@ -48,5 +48,6 @@ and hand drums for tribal/minimal techno, tribal/organic/progressive house, Cumb
     LATCH makes the lane follow Ableton's transport, locked to the grid.
   - TRIGGER: the note plays the drum directly with velocity (pad mode).
 
-Every push builds the plugin for Mac automatically.
+Every push builds the plugin for Mac automatically, as an Audio Unit (quemao.component)
+and a VST3 (quemao.vst3), both in quemao-mac.zip.
 Download it from the **Actions** tab → latest run → **Artifacts**.
